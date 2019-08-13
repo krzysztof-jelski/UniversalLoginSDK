@@ -1,11 +1,12 @@
 import React, {useState} from 'react';
-import {OnRampConfig, stringToEther} from '@universal-login/commons';
+import {OnRampConfig} from '@universal-login/commons';
 import TopUpChoose from './TopUpChoose';
 import {Safello} from '../../integration/Safello';
 import {TopUpAmount} from './TopUpAmount';
-import {Ramp} from '../../integration/Ramp';
 import {TopUpWithCrypto} from './TopUpWithCrypto';
 import {TopUpComponentType} from '../../core/models/TopUpComponentType';
+import {Wyre} from '../../integration/Wyre';
+import {WyreIframe} from '../../integration/WyreIframe';
 
 
 interface TopUpProps {
@@ -45,12 +46,13 @@ export const TopUp = ({contractAddress, startModal, onRampConfig, hideModal}: To
   } else if (modal === TopUpComponentType.bank) {
     hideModal ? hideModal() : null;
     return(
-      <Ramp
-        address={contractAddress}
-        amount={stringToEther(amount)}
-        currency={'ETH'}
-        config={onRampConfig.ramp}
-      />
+      <WyreIframe amount={0.05} contractAddress="0x43ECDb9cf0bd4345B009e8B279567e9B4F4631aF" symbol="ETH"/>
+      // <Ramp
+      //   address={contractAddress}
+      //   amount={stringToEther(amount)}
+      //   currency={'ETH'}
+      //   config={onRampConfig.ramp}
+      // />
     );
   } else {
     throw new Error(`Unsupported type: ${modal}`);
