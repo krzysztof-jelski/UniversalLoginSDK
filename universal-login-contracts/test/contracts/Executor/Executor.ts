@@ -5,8 +5,8 @@ import basicExecutor from '../../fixtures/basicExecutor';
 import {transferMessage, failedTransferMessage, callMessage, failedCallMessage} from '../../helpers/ExampleMessages';
 import {utils, providers, Contract, Wallet} from 'ethers';
 import {calculateMessageHash, calculateMessageSignature, concatenateSignatures, DEFAULT_GAS_PRICE, TEST_ACCOUNT_ADDRESS, UnsignedMessage, KeyPair} from '@universal-login/commons';
-import {TEST_PAYMENT_OPTIONS_NO_GAS_TOKEN} from '../../../lib/defaultPaymentOptions';
 import {getExecutionArgs} from '../../helpers/argumentsEncoding';
+import {calculatePaymentOptions} from '../../../lib/estimateGas';
 
 chai.use(chaiAsPromised);
 chai.use(solidity);
@@ -78,14 +78,14 @@ describe('CONTRACT: Executor - main', async  () => {
     describe('successful execution of transfer', () => {
       it('transfers funds', async () => {
         expect(await provider.getBalance(to)).to.eq(0);
-        await walletContract.executeSigned(...getExecutionArgs(msg), signature, TEST_PAYMENT_OPTIONS_NO_GAS_TOKEN);
+        await walletContract.executeSigned(...getExecutionArgs(msg), signature, calculatePaymentOptions(msg));
         expect(await provider.getBalance(to)).to.eq(parseEther('1.0'));
         expect(await walletContract.lastNonce()).to.eq(1);
       });
 
       it('emits ExecutedSigned event', async () => {
         const messageHash = calculateMessageHash(msg);
-        await expect(walletContract.executeSigned(...getExecutionArgs(msg), signature, TEST_PAYMENT_OPTIONS_NO_GAS_TOKEN))
+        await expect(walletContract.executeSigned(...getExecutionArgs(msg), signature, calculatePaymentOptions(msg)))
           .to.emit(walletContract, 'ExecutedSigned')
           .withArgs(messageHash, 0, true);
       });
@@ -95,13 +95,13 @@ describe('CONTRACT: Executor - main', async  () => {
           msg = {...transferMessage, from: walletContract.address, gasToken: mockToken.address};
           signature = calculateMessageSignature(managementKeyPair.privateKey, msg);
 
-          await walletContract.executeSigned(...getExecutionArgs(msg), signature, TEST_PAYMENT_OPTIONS_NO_GAS_TOKEN);
+          await walletContract.executeSigned(...getExecutionArgs(msg), signature, calculatePaymentOptions(msg));
 
           expect(await mockToken.balanceOf(wallet.address)).to.be.above(relayerTokenBalance);
         });
 
         it('should refund after execute transfer ethers', async () => {
-          const transaction = await walletContract.executeSigned(...getExecutionArgs(msg), signature, TEST_PAYMENT_OPTIONS_NO_GAS_TOKEN);
+          const transaction = await walletContract.executeSigned(...getExecutionArgs(msg), signature, calculatePaymentOptions(msg));
 
           const {gasUsed} = await provider.getTransactionReceipt(transaction.hash);
           const totalCost = gasUsed!.mul(utils.bigNumberify(DEFAULT_GAS_PRICE));
@@ -113,15 +113,15 @@ describe('CONTRACT: Executor - main', async  () => {
 
     describe('failed execution of transfer', () => {
       it('nonce too low', async () => {
-        await walletContract.executeSigned(...getExecutionArgs(msg), signature, TEST_PAYMENT_OPTIONS_NO_GAS_TOKEN);
-        await expect(walletContract.executeSigned(...getExecutionArgs(msg), signature, TEST_PAYMENT_OPTIONS_NO_GAS_TOKEN))
+        await walletContract.executeSigned(...getExecutionArgs(msg), signature, calculatePaymentOptions(msg));
+        await expect(walletContract.executeSigned(...getExecutionArgs(msg), signature, calculatePaymentOptions(msg)))
           .to.be.revertedWith('Invalid signature or nonce');
       });
 
       it('nonce too high', async () => {
         msg = {...transferMessage, from: walletContract.address, nonce: 2};
         signature = calculateMessageSignature(managementKeyPair.privateKey, msg);
-        await expect(walletContract.executeSigned(...getExecutionArgs(msg), signature, TEST_PAYMENT_OPTIONS_NO_GAS_TOKEN))
+        await expect(walletContract.executeSigned(...getExecutionArgs(msg), signature, calculatePaymentOptions(msg)))
           .to.be.revertedWith('Invalid signature or nonce');
       });
 
@@ -130,7 +130,7 @@ describe('CONTRACT: Executor - main', async  () => {
         signature = calculateMessageSignature(managementKeyPair.privateKey, msg);
         const messageHash = calculateMessageHash(msg);
 
-        await expect(walletContract.executeSigned(...getExecutionArgs(msg), signature, TEST_PAYMENT_OPTIONS_NO_GAS_TOKEN))
+        await expect(walletContract.executeSigned(...getExecutionArgs(msg), signature, calculatePaymentOptions(msg)))
           .to.emit(walletContract, 'ExecutedSigned')
           .withArgs(messageHash, 0, false);
       });
@@ -139,32 +139,32 @@ describe('CONTRACT: Executor - main', async  () => {
         msg = {...failedTransferMessage, from: walletContract.address};
         signature = calculateMessageSignature(managementKeyPair.privateKey, msg);
 
-        await walletContract.executeSigned(...getExecutionArgs(msg), signature, TEST_PAYMENT_OPTIONS_NO_GAS_TOKEN);
+        await walletContract.executeSigned(...getExecutionArgs(msg), signature, calculatePaymentOptions(msg));
         expect(await provider.getBalance(to)).to.eq(parseEther('0.0'));
         expect(await walletContract.lastNonce()).to.eq(1);
       });
 
       describe('Invalid signature', () => {
         it('no signature', async () => {
-          await expect(walletContract.executeSigned(...getExecutionArgs(msg), [], TEST_PAYMENT_OPTIONS_NO_GAS_TOKEN))
+          await expect(walletContract.executeSigned(...getExecutionArgs(msg), [], calculatePaymentOptions(msg)))
             .to.be.revertedWith('Invalid signatures');
           expect(await walletContract.lastNonce()).to.eq(0);
           expect(await provider.getBalance(to)).to.eq(parseEther('0.0'));
         });
 
         it('should be reverted', async () => {
-          await expect(walletContract.executeSigned(...getExecutionArgs(msg), invalidSignature, TEST_PAYMENT_OPTIONS_NO_GAS_TOKEN))
+          await expect(walletContract.executeSigned(...getExecutionArgs(msg), invalidSignature, calculatePaymentOptions(msg)))
             .to.be.revertedWith('Invalid signature or nonce');
         });
 
         it('shouldn`t transfer ethers', async () => {
-          await expect(walletContract.executeSigned(...getExecutionArgs(msg), invalidSignature, TEST_PAYMENT_OPTIONS_NO_GAS_TOKEN))
+          await expect(walletContract.executeSigned(...getExecutionArgs(msg), invalidSignature, calculatePaymentOptions(msg)))
             .to.be.revertedWith('Invalid signature or nonce');
           expect(await provider.getBalance(to)).to.eq(parseEther('0.0'));
         });
 
         it('shouldn`t increase nonce', async () => {
-          await expect(walletContract.executeSigned(...getExecutionArgs(msg), invalidSignature, TEST_PAYMENT_OPTIONS_NO_GAS_TOKEN))
+          await expect(walletContract.executeSigned(...getExecutionArgs(msg), invalidSignature, calculatePaymentOptions(msg)))
             .to.be.revertedWith('Invalid signature or nonce');
           expect(await walletContract.lastNonce()).to.eq(0);
         });
@@ -175,7 +175,7 @@ describe('CONTRACT: Executor - main', async  () => {
           msg = {...failedTransferMessage, from: walletContract.address};
           signature = calculateMessageSignature(managementKeyPair.privateKey, msg);
 
-          const transaction = await walletContract.executeSigned(...getExecutionArgs(msg), signature, TEST_PAYMENT_OPTIONS_NO_GAS_TOKEN);
+          const transaction = await walletContract.executeSigned(...getExecutionArgs(msg), signature, calculatePaymentOptions(msg));
 
           const {gasUsed} = await provider.getTransactionReceipt(transaction.hash);
           const totalCost = gasUsed!.mul(utils.bigNumberify(DEFAULT_GAS_PRICE));
@@ -186,7 +186,7 @@ describe('CONTRACT: Executor - main', async  () => {
         it('should refund tokens', async () => {
           msg = {...failedTransferMessage, from: walletContract.address, gasToken: mockToken.address};
           signature = calculateMessageSignature(managementKeyPair.privateKey, msg);
-          await walletContract.executeSigned(...getExecutionArgs(msg), signature, TEST_PAYMENT_OPTIONS_NO_GAS_TOKEN);
+          await walletContract.executeSigned(...getExecutionArgs(msg), signature, calculatePaymentOptions(msg));
           expect(await mockToken.balanceOf(wallet.address)).to.be.above(relayerTokenBalance);
         });
       });
@@ -204,18 +204,18 @@ describe('CONTRACT: Executor - main', async  () => {
 
       it('called method', async () => {
         expect(await mockContract.wasCalled()).to.be.false;
-        await walletContract.executeSigned(...getExecutionArgs(msgToCall), signatures, TEST_PAYMENT_OPTIONS_NO_GAS_TOKEN);
+        await walletContract.executeSigned(...getExecutionArgs(msgToCall), signatures, calculatePaymentOptions(msgToCall));
         expect(await mockContract.wasCalled()).to.be.true;
       });
 
       it('increase nonce', async () => {
-        await walletContract.executeSigned(...getExecutionArgs(msgToCall), signatures, TEST_PAYMENT_OPTIONS_NO_GAS_TOKEN);
+        await walletContract.executeSigned(...getExecutionArgs(msgToCall), signatures, calculatePaymentOptions(msgToCall));
         expect(await walletContract.lastNonce()).to.eq(1);
       });
 
       it('should emit ExecutedSigned', async () => {
         const messageHash = calculateMessageHash(msgToCall);
-        await expect(walletContract.executeSigned(...getExecutionArgs(msgToCall), signatures, TEST_PAYMENT_OPTIONS_NO_GAS_TOKEN))
+        await expect(walletContract.executeSigned(...getExecutionArgs(msgToCall), signatures, calculatePaymentOptions(msgToCall)))
           .to.emit(walletContract, 'ExecutedSigned')
           .withArgs(messageHash, 0, true);
       });
@@ -223,7 +223,7 @@ describe('CONTRACT: Executor - main', async  () => {
       it('with 2 required Signature', async () => {
         await walletContract.setRequiredSignatures(2);
         expect(await mockContract.wasCalled()).to.be.false;
-        await walletContract.executeSigned(...getExecutionArgs(msgToCall), signatures, TEST_PAYMENT_OPTIONS_NO_GAS_TOKEN);
+        await walletContract.executeSigned(...getExecutionArgs(msgToCall), signatures, calculatePaymentOptions(msgToCall));
         expect(await mockContract.wasCalled()).to.be.true;
       });
     });
@@ -236,14 +236,14 @@ describe('CONTRACT: Executor - main', async  () => {
       it('should fail with a least an invalid signature', async () => {
         const signature1 = calculateMessageSignature(sortedKeys[0], msgToCall);
         const corruptedSignatures = concatenateSignatures([signature1, invalidSignature]);
-        await expect(walletContract.executeSigned(...getExecutionArgs(msgToCall), corruptedSignatures, TEST_PAYMENT_OPTIONS_NO_GAS_TOKEN))
+        await expect(walletContract.executeSigned(...getExecutionArgs(msgToCall), corruptedSignatures, calculatePaymentOptions(msgToCall)))
           .to.be.revertedWith('Invalid signature or nonce');
       });
 
       it('should fail if there are two equal singatures', async () => {
         const signature1 = calculateMessageSignature(sortedKeys[0], msgToCall);
         const corruptedSignatures = concatenateSignatures([signature1, signature1]);
-        await expect(walletContract.executeSigned(...getExecutionArgs(msgToCall), corruptedSignatures, TEST_PAYMENT_OPTIONS_NO_GAS_TOKEN))
+        await expect(walletContract.executeSigned(...getExecutionArgs(msgToCall), corruptedSignatures, calculatePaymentOptions(msgToCall)))
           .to.be.revertedWith('Invalid signature or nonce');
       });
 
@@ -251,12 +251,12 @@ describe('CONTRACT: Executor - main', async  () => {
         const signature1 = calculateMessageSignature(sortedKeys[0], msgToCall);
         const signature2 = calculateMessageSignature(sortedKeys[1], msgToCall);
         const corruptedSignatures = `${concatenateSignatures([signature1, signature2])}a`;
-        await expect(walletContract.executeSigned(...getExecutionArgs(msgToCall), corruptedSignatures, TEST_PAYMENT_OPTIONS_NO_GAS_TOKEN))
+        await expect(walletContract.executeSigned(...getExecutionArgs(msgToCall), corruptedSignatures, calculatePaymentOptions(msgToCall)))
           .to.be.revertedWith('Invalid signature or nonce');
       });
 
       it('should fail 0 length input in signatures', async () => {
-        await expect(walletContract.executeSigned(...getExecutionArgs(msgToCall), '0x', TEST_PAYMENT_OPTIONS_NO_GAS_TOKEN))
+        await expect(walletContract.executeSigned(...getExecutionArgs(msgToCall), '0x', calculatePaymentOptions(msgToCall)))
           .to.be.revertedWith('Invalid signatures');
       });
 
@@ -264,7 +264,7 @@ describe('CONTRACT: Executor - main', async  () => {
         signatures = calculateMessageSignature(sortedKeys[0], msgToCall);
         await walletContract.setRequiredSignatures(3);
         expect(await mockContract.wasCalled()).to.be.false;
-        await expect(walletContract.executeSigned(...getExecutionArgs(msgToCall), signatures, TEST_PAYMENT_OPTIONS_NO_GAS_TOKEN))
+        await expect(walletContract.executeSigned(...getExecutionArgs(msgToCall), signatures, calculatePaymentOptions(msgToCall)))
           .to.be.revertedWith('Not enough signatures');
         expect(await mockContract.wasCalled()).to.be.false;
       });
@@ -275,7 +275,7 @@ describe('CONTRACT: Executor - main', async  () => {
         signatures = await concatenateSignatures([signature1, signature2, signature2]);
         await walletContract.setRequiredSignatures(3);
         expect(await mockContract.wasCalled()).to.be.false;
-        await expect(walletContract.executeSigned(...getExecutionArgs(msgToCall), signatures, TEST_PAYMENT_OPTIONS_NO_GAS_TOKEN))
+        await expect(walletContract.executeSigned(...getExecutionArgs(msgToCall), signatures, calculatePaymentOptions(msgToCall)))
           .to.be.revertedWith('Invalid signature or nonce');
         expect(await mockContract.wasCalled()).to.be.false;
       });
@@ -294,32 +294,32 @@ describe('CONTRACT: Executor - main', async  () => {
 
       it('called method', async () => {
         expect(await mockContract.wasCalled()).to.be.false;
-        await walletContract.executeSigned(...getExecutionArgs(msgToCall), signatures, TEST_PAYMENT_OPTIONS_NO_GAS_TOKEN);
+        await walletContract.executeSigned(...getExecutionArgs(msgToCall), signatures, calculatePaymentOptions(msgToCall));
         expect(await mockContract.wasCalled()).to.be.true;
       });
 
       it('increase nonce', async () => {
-        await walletContract.executeSigned(...getExecutionArgs(msgToCall), signatures, TEST_PAYMENT_OPTIONS_NO_GAS_TOKEN);
+        await walletContract.executeSigned(...getExecutionArgs(msgToCall), signatures, calculatePaymentOptions(msgToCall));
         expect(await walletContract.lastNonce()).to.eq(1);
       });
 
       it('call method with 3 out of 2 required signatures', async () => {
         await walletContract.setRequiredSignatures(2);
         expect(await mockContract.wasCalled()).to.be.false;
-        await walletContract.executeSigned(...getExecutionArgs(msgToCall), signatures, TEST_PAYMENT_OPTIONS_NO_GAS_TOKEN);
+        await walletContract.executeSigned(...getExecutionArgs(msgToCall), signatures, calculatePaymentOptions(msgToCall));
         expect(await mockContract.wasCalled()).to.be.true;
       });
 
       it('call method with 3 out of 3 required signatures', async () => {
         await walletContract.setRequiredSignatures(3);
         expect(await mockContract.wasCalled()).to.be.false;
-        await walletContract.executeSigned(...getExecutionArgs(msgToCall), signatures, TEST_PAYMENT_OPTIONS_NO_GAS_TOKEN);
+        await walletContract.executeSigned(...getExecutionArgs(msgToCall), signatures, calculatePaymentOptions(msgToCall));
         expect(await mockContract.wasCalled()).to.be.true;
       });
 
       it('should emit ExecutedSigned', async () => {
         const messageHash = calculateMessageHash(msgToCall);
-        await expect(walletContract.executeSigned(...getExecutionArgs(msgToCall), signatures, TEST_PAYMENT_OPTIONS_NO_GAS_TOKEN))
+        await expect(walletContract.executeSigned(...getExecutionArgs(msgToCall), signatures, calculatePaymentOptions(msgToCall)))
           .to.emit(walletContract, 'ExecutedSigned')
           .withArgs(messageHash, 0, true);
       });
@@ -330,7 +330,7 @@ describe('CONTRACT: Executor - main', async  () => {
         const signature2 = calculateMessageSignature(sortedKeys[1], msgToCall);
         const signature3 = calculateMessageSignature(sortedKeys[2], msgToCall);
         signatures = concatenateSignatures([signature2, signature1, signature3]);
-        await expect(walletContract.executeSigned(...getExecutionArgs(msgToCall), signatures, TEST_PAYMENT_OPTIONS_NO_GAS_TOKEN))
+        await expect(walletContract.executeSigned(...getExecutionArgs(msgToCall), signatures, calculatePaymentOptions(msgToCall)))
           .to.be.revertedWith('Invalid signature or nonce');
       });
     });
@@ -344,7 +344,7 @@ describe('CONTRACT: Executor - main', async  () => {
         const signature1 = calculateMessageSignature(sortedKeys[0], msgToCall);
         const signature2 = calculateMessageSignature(sortedKeys[1], msgToCall);
         const corruptedSignatures = concatenateSignatures([signature1, signature2, invalidSignature]);
-        await expect(walletContract.executeSigned(...getExecutionArgs(msgToCall), corruptedSignatures, TEST_PAYMENT_OPTIONS_NO_GAS_TOKEN))
+        await expect(walletContract.executeSigned(...getExecutionArgs(msgToCall), corruptedSignatures, calculatePaymentOptions(msgToCall)))
           .to.be.revertedWith('Invalid signature or nonce');
       });
 
@@ -352,7 +352,7 @@ describe('CONTRACT: Executor - main', async  () => {
         const signature1 = calculateMessageSignature(sortedKeys[0], msgToCall);
         const signature2 = calculateMessageSignature(sortedKeys[1], msgToCall);
         const corruptedSignatures = concatenateSignatures([signature1, signature1, signature2]);
-        await expect(walletContract.executeSigned(...getExecutionArgs(msgToCall), corruptedSignatures, TEST_PAYMENT_OPTIONS_NO_GAS_TOKEN))
+        await expect(walletContract.executeSigned(...getExecutionArgs(msgToCall), corruptedSignatures, calculatePaymentOptions(msgToCall)))
           .to.be.revertedWith('Invalid signature or nonce');
       });
 
@@ -360,12 +360,12 @@ describe('CONTRACT: Executor - main', async  () => {
         const signature1 = calculateMessageSignature(sortedKeys[0], msgToCall);
         const signature2 = calculateMessageSignature(sortedKeys[1], msgToCall);
         const corruptedSignatures = `${concatenateSignatures([signature1, signature2])}a`;
-        await expect(walletContract.executeSigned(...getExecutionArgs(msgToCall), corruptedSignatures, TEST_PAYMENT_OPTIONS_NO_GAS_TOKEN))
+        await expect(walletContract.executeSigned(...getExecutionArgs(msgToCall), corruptedSignatures, calculatePaymentOptions(msgToCall)))
           .to.be.revertedWith('Invalid signature or nonce');
       });
 
       it('should fail 0 length input in signatures', async () => {
-        await expect(walletContract.executeSigned(...getExecutionArgs(msgToCall), '0x', TEST_PAYMENT_OPTIONS_NO_GAS_TOKEN))
+        await expect(walletContract.executeSigned(...getExecutionArgs(msgToCall), '0x', calculatePaymentOptions(msgToCall)))
           .to.be.revertedWith('Invalid signatures');
       });
 
@@ -375,7 +375,7 @@ describe('CONTRACT: Executor - main', async  () => {
         const signature2 = calculateMessageSignature(sortedKeys[1], msgToCall);
         const signature3 = calculateMessageSignature(sortedKeys[2], msgToCall);
         signatures = concatenateSignatures([signature1, signature3, signature2]);
-        await expect(walletContract.executeSigned(...getExecutionArgs(msgToCall), signatures, TEST_PAYMENT_OPTIONS_NO_GAS_TOKEN))
+        await expect(walletContract.executeSigned(...getExecutionArgs(msgToCall), signatures, calculatePaymentOptions(msgToCall)))
           .to.be.revertedWith('Invalid signature or nonce');
       });
     });
@@ -390,18 +390,18 @@ describe('CONTRACT: Executor - main', async  () => {
 
       it('called method', async () => {
         expect(await mockContract.wasCalled()).to.be.false;
-        await walletContract.executeSigned(...getExecutionArgs(msgToCall), signatureToCall, TEST_PAYMENT_OPTIONS_NO_GAS_TOKEN);
+        await walletContract.executeSigned(...getExecutionArgs(msgToCall), signatureToCall, calculatePaymentOptions(msgToCall));
         expect(await mockContract.wasCalled()).to.be.true;
       });
 
       it('increase nonce', async () => {
-        await walletContract.executeSigned(...getExecutionArgs(msgToCall), signatureToCall, TEST_PAYMENT_OPTIONS_NO_GAS_TOKEN);
+        await walletContract.executeSigned(...getExecutionArgs(msgToCall), signatureToCall, calculatePaymentOptions(msgToCall));
         expect(await walletContract.lastNonce()).to.eq(1);
       });
 
       it('should emit ExecutedSigned', async () => {
         const messageHash = calculateMessageHash(msgToCall);
-        await expect(walletContract.executeSigned(...getExecutionArgs(msgToCall), signatureToCall, TEST_PAYMENT_OPTIONS_NO_GAS_TOKEN))
+        await expect(walletContract.executeSigned(...getExecutionArgs(msgToCall), signatureToCall, calculatePaymentOptions(msgToCall)))
           .to.emit(walletContract, 'ExecutedSigned')
           .withArgs(messageHash, 0, true);
       });
@@ -411,7 +411,7 @@ describe('CONTRACT: Executor - main', async  () => {
           msgToCall = {...callMessage, from: walletContract.address, to: mockContract.address};
           signatureToCall = calculateMessageSignature(managementKeyPair.privateKey, msgToCall);
 
-          const transaction = await walletContract.executeSigned(...getExecutionArgs(msgToCall), signatureToCall, TEST_PAYMENT_OPTIONS_NO_GAS_TOKEN);
+          const transaction = await walletContract.executeSigned(...getExecutionArgs(msgToCall), signatureToCall, calculatePaymentOptions(msgToCall));
 
           const {gasUsed} = await provider.getTransactionReceipt(transaction.hash);
           const totalCost = gasUsed!.mul(utils.bigNumberify(DEFAULT_GAS_PRICE));
@@ -422,7 +422,7 @@ describe('CONTRACT: Executor - main', async  () => {
         it('should refund tokens', async () => {
           msgToCall = {...callMessage, from: walletContract.address, to: mockContract.address, gasToken: mockToken.address};
           signatureToCall = calculateMessageSignature(managementKeyPair.privateKey, msgToCall);
-          await walletContract.executeSigned(...getExecutionArgs(msgToCall), signatureToCall, TEST_PAYMENT_OPTIONS_NO_GAS_TOKEN);
+          await walletContract.executeSigned(...getExecutionArgs(msgToCall), signatureToCall, calculatePaymentOptions(msgToCall));
           expect(await mockToken.balanceOf(wallet.address)).to.be.above(relayerTokenBalance);
         });
       });
@@ -435,13 +435,13 @@ describe('CONTRACT: Executor - main', async  () => {
       });
 
       it('should increase nonce', async () => {
-        await walletContract.executeSigned(...getExecutionArgs(msgToCall), signatureToCall, TEST_PAYMENT_OPTIONS_NO_GAS_TOKEN);
+        await walletContract.executeSigned(...getExecutionArgs(msgToCall), signatureToCall, calculatePaymentOptions(msgToCall));
         expect(await walletContract.lastNonce()).to.eq(1);
       });
 
       it('should emit ExecutedSigned event', async () => {
         const messageHash = calculateMessageHash(msgToCall);
-        await expect(walletContract.executeSigned(...getExecutionArgs(msgToCall), signatureToCall, TEST_PAYMENT_OPTIONS_NO_GAS_TOKEN))
+        await expect(walletContract.executeSigned(...getExecutionArgs(msgToCall), signatureToCall, calculatePaymentOptions(msgToCall)))
           .to.emit(walletContract, 'ExecutedSigned')
           .withArgs(messageHash, 0, false);
       });
@@ -450,13 +450,13 @@ describe('CONTRACT: Executor - main', async  () => {
         msg = {...msgToCall, nonce: 2};
         signature = calculateMessageSignature(managementKeyPair.privateKey, msg);
 
-        await expect(walletContract.executeSigned(...getExecutionArgs(msg), signature, TEST_PAYMENT_OPTIONS_NO_GAS_TOKEN))
+        await expect(walletContract.executeSigned(...getExecutionArgs(msg), signature, calculatePaymentOptions(msg)))
           .to.be.revertedWith('Invalid signature or nonce');
       });
 
       describe('refund', () => {
         it('should refund ether', async () => {
-          const transaction = await walletContract.executeSigned(...getExecutionArgs(msgToCall), signatureToCall, TEST_PAYMENT_OPTIONS_NO_GAS_TOKEN);
+          const transaction = await walletContract.executeSigned(...getExecutionArgs(msgToCall), signatureToCall, calculatePaymentOptions(msgToCall));
 
           const {gasUsed} = await provider.getTransactionReceipt(transaction.hash);
           const totalCost = gasUsed!.mul(utils.bigNumberify(DEFAULT_GAS_PRICE));
@@ -467,7 +467,7 @@ describe('CONTRACT: Executor - main', async  () => {
         it('should refund tokens', async () => {
           msg = {...msgToCall, gasToken: mockToken.address};
           signature = calculateMessageSignature(managementKeyPair.privateKey, msg);
-          await walletContract.executeSigned(...getExecutionArgs(msg), signature, TEST_PAYMENT_OPTIONS_NO_GAS_TOKEN);
+          await walletContract.executeSigned(...getExecutionArgs(msg), signature, calculatePaymentOptions(msg));
           expect(await mockToken.balanceOf(wallet.address)).to.be.above(relayerTokenBalance);
         });
       });
